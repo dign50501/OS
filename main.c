@@ -24,8 +24,8 @@ typedef struct {
     int execution_time; // 프로세스가 특정 시점까지 실행한 시간
     int remaining_time; // cpu burst time - execution time. 프로세스가 종료될때까지 남은 시간
     int priority; // 프로세스의 우선순위. Priority의 갚이 높을 수록 실행이 먼저 된다.
-//    int interrupt; // 인터럽트의 존재여부. time이랑 합칠까..?
-    int interrupt_time; // interrupt가 없을 경우에는 0 있을 경우에는 interrupt되는 최대 횟수
+    int interrupt; // 인터럽트의 존재 - 0 이면 없음, 1이면 1번, 2이면 2번, 3이면 3번.
+    int interrupt_time[10]; // interrupt가 되는 시간.
 
 } process;
 
@@ -46,6 +46,7 @@ int get_num_process(void); // 몇개의 프로세스를 생성할지 정해주�
 process Initialization_Running_state();
 
 /*queue에 관련된 함수 모음*/
+void *Create_Random_IO(int *interrupt_time, int interrupt, int cpu_burst_time); // I/O하는 시간을 랜덤하게 생성
 process *Create_Random_Processes(int process_num);// 프로세스를 process_num만큼 랜덤하게 생성
 process *Create_Queue(int process_num); // process 저장할 queue 생성
 process PEEK_QUEUE(process *processes); // 큐에서 0번째 인덱스 프로세스를 가져옴
@@ -56,7 +57,7 @@ process context_switching(process *processes, process Running_State); // process
 process *Copy_Queue(process *processes, int process_num); // 큐를 똑같이 복사.
 
 /* 출력하는 함수들 모음*/
-void print_process(process *processes, int process_num); // 현재 프로세스의 상태들을 나타내는 함수
+void print_process(process *processes); // 현재 프로세스의 상태들을 나타내는 함수
 void print_Running_state(process Running_state); // Running State 상태 출력
 void print_Ready_Queue(process *READY_QUEUE); // Ready queue 상태 출력
 void print_WAITING_QUEUEueue(process *WAITING_QUEUE);
@@ -97,7 +98,7 @@ int Menu(void) {
     process_num = get_num_process(); // 프로세스의 갯수를 입력받아서 가져옴.
     // 입력받은 프로세스의 갯수만큼 랜덤한 프로세스를 생성한다.
     process *processes = Create_Random_Processes(process_num);
-    print_process(processes, process_num); // 생성된 랜덤한 프로세스들의 상태를 print한다.
+    print_process(processes); // 생성된 랜덤한 프로세스들의 상태를 print한다.
     //이부분에 구현하나 안한거있음. 프로세스 > 정렬
     while (1) {
         printf("\n");
@@ -182,7 +183,7 @@ int Menu(void) {
                 is_executed[5] = 1;
                 break;
             case 7:
-                print_process(processes, process_num);
+                print_process(processes);
                 printf("\n");
                 //evaluation_Result(process_num);
             case 8: // 프로세스를 다시 생성하여 처음부터 다시 시작한다.
@@ -219,14 +220,37 @@ process Initialization_Running_state() {
     return temp;
 }
 
-// interrupt_time 다른코드!!
+void *Create_Random_IO(int *interrupt_time, int interrupt, int cpu_burst_time) {
+    int i, j; // for loop
+    int flag; // 중복 생성을 막기위해
+    // interrupt 횟수만큼 배열을 생성
+    srand((unsigned int) time(NULL)); // rand() 사용하기 위해
+    for (i = 0; i < interrupt; i++) { // interrupt 시간
+        while (1) {
+            // 1 ~ cpu_burst_time - 1 사이의 값 -> 이 시간에 I/O 가 발생
+            interrupt_time[i] = rand() % (cpu_burst_time - 1) + 1;
+            flag = 0;
+            for (j = 0; j < i; j++) {
+                if (interrupt_time[j] == interrupt_time[i]) {
+                    flag = 1; // 같은 값이 있으므로 flag = 1로 만들고 다시 랜덤 숫자를 생성해야함.
+                    break;
+                }
+            }
+            if (!flag) // 같은 값이 존재하지 않으면 while 문 탈출
+                break;
+        }
+    }
+
+}
+
 process *Create_Random_Processes(int process_num) {
-    int i;
-    process *processes;
-    srand((unsigned int) time(NULL));
+    int i; // for loop
+    process *processes; // random한 프로세스를 만들기위해
+    srand((unsigned int) time(NULL)); // rand() 사용하기 위해
     // process structure array 생성을 한다
-    processes = Create_Queue(process_num);
+    processes = Create_Queue(process_num); // 프로세스를 저장하기위해 배열을 malloc으로 생성
     for (i = 0; i < process_num; i++) {
+        int j; // for loop
         processes[i].PID = i + 1;
         // 0 ~ 9 사이의 random한 int 값을 갖는다
         processes[i].arrive_time = (rand() % 10);
@@ -236,9 +260,13 @@ process *Create_Random_Processes(int process_num) {
         processes[i].remaining_time = processes[i].cpu_burst_time;
         // 각 프로세스에 우선순위 부여. 0 ~ PRIORITY- 1 까지 가능.
         processes[i].priority = rand() % PRIORITY;
-        // 0 ~ 3 사이의 random한 I/O interrupt 횟수 발생
-        processes[i].interrupt_time = (rand() % 4);
+        // 0 ~ cpu burst time - 1 사이의 random한 I/O interrupt 횟수 발생
+        processes[i].interrupt = rand() % (processes[i].cpu_burst_time);
 
+        if (processes[i].interrupt != 0) { // 0 이 아닌 경우에는 I/O 가 발생하는 시간을 랜덤하게 생성
+            // I/O 의 interrupt 횟수만큼 배열을 생성한다.
+            Create_Random_IO(processes[i].interrupt_time, processes[i].interrupt, processes[i].cpu_burst_time);
+        }
     }
     return processes;
 }
@@ -274,7 +302,7 @@ void INSERT_QUEUE(process *processes, process temp) {
 }
 
 void DELETE_QUEUE(process *processes) {
-    int i;
+    int i, j;
     for (i = 0; processes[i].PID != 0; i++) {
         processes[i] = processes[i + 1];
     }
@@ -286,7 +314,10 @@ void DELETE_QUEUE(process *processes) {
     processes[i].execution_time = 0;
     processes[i].remaining_time = 0;
     processes[i].priority = 0;
-    processes[i].interrupt_time = 0;
+    processes[i].interrupt = 0;
+    for (j = 0; j < 10; j++) {
+        processes[i].interrupt_time[j] = 0;
+    }
 
 }
 
@@ -315,80 +346,114 @@ process context_switching(process *processes, process Running_State) {
 }
 
 process *Copy_Queue(process *processes, int process_num) {
-    int i; // for문
-    process *copied_processes = Create_Queue(process_num);
-    // processes에 있는 각각의 process들을 copied_processes에 복사한다.
+    int i, j;
+    process *copyprocess;
+    copyprocess = Create_Queue(process_num);
     for (i = 0; i < process_num; i++) {
-        memcpy(&copied_processes[i], &processes[i], sizeof(process));
+        copyprocess[i].PID = processes[i].PID;
+        copyprocess[i].arrive_time = processes[i].arrive_time;
+        copyprocess[i].cpu_burst_time = processes[i].cpu_burst_time;
+        copyprocess[i].waiting_time = processes[i].waiting_time;
+        copyprocess[i].execution_time = processes[i].execution_time;
+        copyprocess[i].remaining_time = processes[i].remaining_time;
+        copyprocess[i].priority = processes[i].priority;
+        copyprocess[i].interrupt = processes[i].interrupt;
+        if (copyprocess[i].interrupt != 0) { // 0 이 아닌 경우에는 I/O 가 발생하는 시간을 랜덤하게 생성
+            // I/O 의 interrupt 횟수만큼 배열을 생성한다.
+            for (j = 0; j < copyprocess[i].interrupt; j++) {
+                // 인터럽트 시간복사
+                copyprocess[i].interrupt_time[j] = processes[i].interrupt_time[j];
+            }
+            for(j = copyprocess[i].interrupt; j < 10; j++){
+                // 인터럽트횟수보다 큰곳은 모두 0으로 처리
+                copyprocess[i].interrupt_time[j] = 0;
+            }
+        }
     }
-    return copied_processes;
+    return copyprocess;
 }
 
-void print_process(process *processes, int process_num) {
-    int i;
+void print_process(process *processes) {
+    int i, j;
     printf("\n** <process> ** \n");
-    printf("______________________________________________________________________________________________________________ \n");
-    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |\n");
-    printf("______________________________________________________________________________________________________________ \n");
+    printf("_________________________________________________________________________________________________________________________________\n");
+    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |   interrupt time |\n");
+    printf("_________________________________________________________________________________________________________________________________\n");
     for (i = 0; processes[i].PID != 0; i++) {
-        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |\n",
+        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |",
                processes[i].PID, processes[i].arrive_time, processes[i].waiting_time,
                processes[i].remaining_time, processes[i].cpu_burst_time,
-               processes[i].execution_time, processes[i].priority, processes[i].interrupt_time);
+               processes[i].execution_time, processes[i].priority, processes[i].interrupt);
+        for (j = 0; j < processes[i].interrupt; j++) {
+            printf(" %d ", processes[i].interrupt_time[j]);
+        }
+        printf("|\n");
     }
-    printf("______________________________________________________________________________________________________________\n");
+    printf("_________________________________________________________________________________________________________________________________\n");
     printf("\n");
     printf("\n");
 
 }
 
 void print_Running_state(process Running_state) {
+    int j; // for loop
     printf("\n");
     printf("<process의 CPU running state>\n");
-    printf("______________________________________________________________________________________________________________\n");
-    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |\n");
-    printf("______________________________________________________________________________________________________________\n");
+    printf("_________________________________________________________________________________________________________________________________\n");
+    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |   interrupt time |\n");
+    printf("_________________________________________________________________________________________________________________________________\n");
 
-    printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |\n",
+    printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |",
            Running_state.PID, Running_state.arrive_time,
            Running_state.waiting_time, Running_state.remaining_time,
            Running_state.cpu_burst_time, Running_state.execution_time,
-           Running_state.priority, Running_state.interrupt_time);
-    printf("______________________________________________________________________________________________________________\n");
+           Running_state.priority, Running_state.interrupt);
+    for (j = 0; j < Running_state.interrupt; j++) {
+        printf(" %d ", Running_state.interrupt_time[j]);
+    }
+    printf("_________________________________________________________________________________________________________________________________\n");
     printf("\n");
 
 
 }
 
 void print_Ready_Queue(process *READY_QUEUE) {
-    int i;
+    int i, j;
     printf("** <Ready Queue> ** \n");
-    printf("______________________________________________________________________________________________________________ \n");
-    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |\n");
-    printf("______________________________________________________________________________________________________________ \n");
-    for (i = 0; i < READY_QUEUE[i].PID != 0; i++) {
-        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |\n",
+    printf("_________________________________________________________________________________________________________________________________\n");
+    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |   interrupt time |\n");
+    printf("_________________________________________________________________________________________________________________________________\n");
+    for (i = 0; READY_QUEUE[i].PID != 0; i++) {
+        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |",
                READY_QUEUE[i].PID, READY_QUEUE[i].arrive_time, READY_QUEUE[i].waiting_time,
                READY_QUEUE[i].remaining_time, READY_QUEUE[i].cpu_burst_time,
-               READY_QUEUE[i].execution_time, READY_QUEUE[i].priority, READY_QUEUE[i].interrupt_time);
+               READY_QUEUE[i].execution_time, READY_QUEUE[i].priority, READY_QUEUE[i].interrupt);
+        for (j = 0; j < READY_QUEUE[i].interrupt; j++) {
+            printf(" %d ", READY_QUEUE[i].interrupt_time[j]);
+        }
+        printf("|\n");
     }
     printf("______________________________________________________________________________________________________________\n");
     printf("\n");
 }
 
 void print_Terminated_Queue(process *TERMINATED_QUEUE) {
-    int i;
+    int i, j;
     printf("** <Terminated Queue> ** \n");
-    printf("______________________________________________________________________________________________________________ \n");
-    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |\n");
-    printf("______________________________________________________________________________________________________________ \n");
+    printf("_________________________________________________________________________________________________________________________________\n");
+    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |   interrupt time |\n");
+    printf("_________________________________________________________________________________________________________________________________\n");
     for (i = 0; TERMINATED_QUEUE[i].PID != 0; i++) {
-        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |\n",
+        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |",
                TERMINATED_QUEUE[i].PID, TERMINATED_QUEUE[i].arrive_time, TERMINATED_QUEUE[i].waiting_time,
                TERMINATED_QUEUE[i].remaining_time, TERMINATED_QUEUE[i].cpu_burst_time,
-               TERMINATED_QUEUE[i].execution_time, TERMINATED_QUEUE[i].priority, TERMINATED_QUEUE[i].interrupt_time);
+               TERMINATED_QUEUE[i].execution_time, TERMINATED_QUEUE[i].priority, TERMINATED_QUEUE[i].interrupt);
+        for (j = 0; j < TERMINATED_QUEUE[i].interrupt; j++) {
+            printf(" %d ", TERMINATED_QUEUE[i].interrupt_time[j]);
+        }
+        printf("|\n");
     }
-    printf("______________________________________________________________________________________________________________\n");
+    printf("_________________________________________________________________________________________________________________________________\n");
     printf("\n");
 }
 
@@ -506,7 +571,6 @@ void FCFS(process *processes, int process_num) {
                 INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(FCFS_processes));
                 // ready queue로 삽입을 했으므로 맨처음 프로세스는 삭제해준다.
                 DELETE_QUEUE(FCFS_processes);
-                print_process(FCFS_processes, 1);
             }
 
         }
@@ -525,7 +589,7 @@ void FCFS(process *processes, int process_num) {
         // I/ O 미구현
         // 현재 프로세스들이 상태 출력
         printf("--             First Come Fisrt Served --\n");
-        print_process(processes, process_num);
+        print_process(processes);
         printf("                ** Time: %d**\n", TIME_PAST);
         print_Running_state(Running_state);
         print_Ready_Queue(READY_QUEUE);
