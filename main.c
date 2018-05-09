@@ -26,6 +26,7 @@ typedef struct {
     int priority; // 프로세스의 우선순위. Priority의 갚이 높을 수록 실행이 먼저 된다.
 //    int interrupt; // 인터럽트의 존재여부. time이랑 합칠까..?
     int interrupt_time; // interrupt가 없을 경우에는 0 있을 경우에는 interrupt되는 최대 횟수
+
 } process;
 
 typedef struct {
