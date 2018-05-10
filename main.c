@@ -60,7 +60,7 @@ process *Copy_Queue(process *processes, int process_num); // 큐를 똑같이 �
 void print_process(process *processes); // 현재 프로세스의 상태들을 나타내는 함수
 void print_Running_state(process Running_state); // Running State 상태 출력
 void print_Ready_Queue(process *READY_QUEUE); // Ready queue 상태 출력
-void print_WAITING_QUEUEueue(process *WAITING_QUEUE);
+void print_Waiting_Queue(process *WAITING_QUEUE);
 
 void print_Terminated_Queue(process *TERMINATED_QUEUE); // 종료된 프로세스들의 상태 출력
 void print_Gantt_Chart(int TIME_PAST); // 간트차트 출력
@@ -69,7 +69,7 @@ void PRINT_RESULT(process *TERMINATED_QUEUE, int process_num, int algo); // 알�
 void swap(process *first, process *second);
 
 void SORT_BY_ARRIVAL_TIME(process *processes, int process_num);
-
+int Is_IO_time(int execution_time, int interrupt, int *interrupt_time);
 void FCFS(process *processes, int process_num);
 
 int TIME_PAST; // 타이머 (한 알고리즘당 지난 시간)
@@ -437,6 +437,25 @@ void print_Ready_Queue(process *READY_QUEUE) {
     printf("\n");
 }
 
+void print_Waiting_Queue(process *WAITING_QUEUE){
+    int i, j;
+    printf("** <Waiting Queue> ** \n");
+    printf("_________________________________________________________________________________________________________________________________\n");
+    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |   interrupt time |\n");
+    printf("_________________________________________________________________________________________________________________________________\n");
+    for (i = 0; WAITING_QUEUE[i].PID != 0; i++) {
+        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |",
+               WAITING_QUEUE[i].PID, WAITING_QUEUE[i].arrive_time, WAITING_QUEUE[i].waiting_time,
+               WAITING_QUEUE[i].remaining_time, WAITING_QUEUE[i].cpu_burst_time,
+               WAITING_QUEUE[i].execution_time, WAITING_QUEUE[i].priority, WAITING_QUEUE[i].interrupt);
+        for (j = 0; j < WAITING_QUEUE[i].interrupt; j++) {
+            printf(" %d ", WAITING_QUEUE[i].interrupt_time[j]);
+        }
+        printf("|\n");
+    }
+    printf("______________________________________________________________________________________________________________\n");
+    printf("\n");
+}
 void print_Terminated_Queue(process *TERMINATED_QUEUE) {
     int i, j;
     printf("** <Terminated Queue> ** \n");
@@ -483,8 +502,8 @@ void PRINT_RESULT(process *TERMINATED_QUEUE, int process_num, int algo) {
         // 현재는 sum of waiting time
         AWT += TERMINATED_QUEUE[i].waiting_time;
         average_CPU_burst_time += TERMINATED_QUEUE[i].cpu_burst_time;
-        // Turn around time: CPU burst time + waiting time
-        ATT += (TERMINATED_QUEUE[i].waiting_time + TERMINATED_QUEUE[i].cpu_burst_time);
+        // Turn around time: CPU burst time + waiting time + interrupt(I/O interrupt는 1 단위시간으로 가 )
+        ATT += (TERMINATED_QUEUE[i].waiting_time + TERMINATED_QUEUE[i].cpu_burst_time +  TERMINATED_QUEUE[i].interrupt);
     }
     printf("\n");
     printf("______________________________________________________________________________________________________________\n");
@@ -546,6 +565,20 @@ void SORT_BY_ARRIVAL_TIME(process *processes, int process_num) {
     }
 }
 
+// I/O interrupt가 일어났는가
+int Is_IO_time(int execution_time, int interrupt, int *interrupt_time) {
+    int flag = 0; // 1이면 I.O가 발생한 것이고 0 이면 I/O가 발생하지 않은 것이다.
+    int i; // for loop
+    for (i = 0; i < interrupt; i++) {
+        if (execution_time == interrupt_time[i]) {
+            flag = 1;
+            interrupt_time[i] = 0; // 바꾸지않으면그 특정 I/O 시간에 계속 걸리기 때문에
+            break;
+        }
+    }
+
+    return flag;
+}
 
 void FCFS(process *processes, int process_num) {
     int i = 0, j, k; // i: processes의 index를 access하기 위해, j: for loop에서 사용, k: for loop
@@ -578,8 +611,8 @@ void FCFS(process *processes, int process_num) {
             // waiting queue가 비어있지않은경우
             // PID가 0 이면 비어있는 것
             // 이거 필요없을 거같은데 일단 둠.
-            // WAITING_QUEUE[0].remaining_time --;
-            INSERT_QUEUE(READY_QUEUE, WAITING_QUEUE[0]); // waiting queue의 첫 element를 ready queue에 넣어줌.
+            //   WAITING_QUEUE[0].remaining_time --;
+            INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
             DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
         }
 
@@ -592,18 +625,29 @@ void FCFS(process *processes, int process_num) {
             Running_state = Initialization_Running_state();
             if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) { // 코드가 다름
                 Running_state = context_switching(READY_QUEUE, Running_state);
+
             }
             // context switch 구현
         }
-
-        // I/ O 미구현
+        // I/O interrupt가 발생하는 경우.
+        if (Running_state.interrupt >= 1 &&
+            Is_IO_time(Running_state.execution_time, Running_state.interrupt, Running_state.interrupt_time)) {
+            //  Running_state.remaining_time ++;
+            // Running_state.cpu_burst_time--;
+            //  Running_state.execution_time--;
+            INSERT_QUEUE(WAITING_QUEUE, Running_state);
+            Running_state = Initialization_Running_state();
+            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
+                Running_state = context_switching(READY_QUEUE, Running_state);
+            }
+        }
         // 현재 프로세스들이 상태 출력
-        printf("--             First Come Fisrt Served --\n");
+        printf("-- First Come Fisrt Served --\n");
         print_process(processes);
         printf("                ** Time: %d**\n", TIME_PAST);
         print_Running_state(Running_state);
         print_Ready_Queue(READY_QUEUE);
-        //print_waiting_queue();
+        print_Waiting_Queue(WAITING_QUEUE);
         print_Terminated_Queue(TERMINATED_QUEUE);
         print_Gantt_Chart(TIME_PAST);
 
@@ -625,7 +669,7 @@ void FCFS(process *processes, int process_num) {
     for (k = 0; k < process_num; k++) {
         result[_FCFS].sum_waiting_time += TERMINATED_QUEUE[k].waiting_time;
         result[_FCFS].sum_cpu_burst_time += TERMINATED_QUEUE[k].cpu_burst_time;
-        result[_FCFS].sum_turn_around_time += (TERMINATED_QUEUE[k].waiting_time + TERMINATED_QUEUE[k].cpu_burst_time);
+        result[_FCFS].sum_turn_around_time += (TERMINATED_QUEUE[k].waiting_time + TERMINATED_QUEUE[k].cpu_burst_time) + TERMINATED_QUEUE[k].interrupt;
     }
     result[_FCFS].avg_cpu_burst_time = (float) result[_FCFS].sum_cpu_burst_time / process_num;
     result[_FCFS].AWT = (float) result[_FCFS].sum_waiting_time / process_num;
