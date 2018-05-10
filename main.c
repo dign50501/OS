@@ -364,8 +364,8 @@ process *Copy_Queue(process *processes, int process_num) {
                 // 인터럽트 시간복사
                 copyprocess[i].interrupt_time[j] = processes[i].interrupt_time[j];
             }
-            for(j = copyprocess[i].interrupt; j < 10; j++){
-                // 인터럽트횟수보다 큰곳은 모두 0으로 처리
+            for (j = copyprocess[i].interrupt; j < 10; j++) {
+                // 인터럽트횟수보다 큰곳은 모두 0으로 처
                 copyprocess[i].interrupt_time[j] = 0;
             }
         }
@@ -574,6 +574,15 @@ void FCFS(process *processes, int process_num) {
             }
 
         }
+        if (WAITING_QUEUE[0].PID != EMPTY) {
+            // waiting queue가 비어있지않은경우
+            // PID가 0 이면 비어있는 것
+            // 이거 필요없을 거같은데 일단 둠.
+            // WAITING_QUEUE[0].remaining_time --;
+            INSERT_QUEUE(READY_QUEUE, WAITING_QUEUE[0]); // waiting queue의 첫 element를 ready queue에 넣어줌.
+            DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+        }
+
         // I/O는 아직 구현하지 않았습니다.
         // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우
         if (Running_state.remaining_time <= 0) {
@@ -586,6 +595,7 @@ void FCFS(process *processes, int process_num) {
             }
             // context switch 구현
         }
+
         // I/ O 미구현
         // 현재 프로세스들이 상태 출력
         printf("--             First Come Fisrt Served --\n");
