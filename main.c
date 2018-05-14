@@ -21,8 +21,10 @@ typedef struct {
     int arrive_time; // 프로세스가 도착하는 시간
     int waiting_time; // 프로세스의 waiting time
     int cpu_burst_time; // 프로세스가 CPU에서 사용하는 시간 (CPU burst)
+    int io_burst_time; // 프로세스가 waiting queue에서 대기하는 시간
     int execution_time; // 프로세스가 특정 시점까지 실행한 시간
     int remaining_time; // cpu burst time - execution time. 프로세스가 종료될때까지 남은 시간
+    int io_remaining_time; // I/O가 waiting queue에서 더있어야하는 남은 시간
     int priority; // 프로세스의 우선순위. Priority의 갚이 높을 수록 실행이 먼저 된다.
     int interrupt; // 인터럽트의 존재 - 0 이면 없음, 1이면 1번, 2이면 2번, 3이면 3번.
     int interrupt_time[10]; // interrupt가 되는 시간.
@@ -279,7 +281,10 @@ process *Create_Random_Processes(int process_num) {
         processes[i].priority = rand() % PRIORITY;
         // 0 ~ cpu burst time - 1 사이의 random한 I/O interrupt 횟수 발생
         processes[i].interrupt = rand() % (processes[i].cpu_burst_time);
-
+        // 1,2,3중 하나의 I/O burst time을 갖는다.
+        processes[i].io_burst_time = rand() % 3 + 1;
+        // remaining time은 초기값은 burst time과 동일.
+        processes[i].io_remaining_time = processes[i].io_burst_time;
         if (processes[i].interrupt != 0) { // 0 이 아닌 경우에는 I/O 가 발생하는 시간을 랜덤하게 생성
             // I/O 의 interrupt 횟수만큼 배열을 생성한다.
             Create_Random_IO(processes[i].interrupt_time, processes[i].interrupt, processes[i].cpu_burst_time);
@@ -331,6 +336,8 @@ void DELETE_QUEUE(process *processes) {
     processes[i].remaining_time = 0;
     processes[i].priority = 0;
     processes[i].interrupt = 0;
+    processes[i].io_burst_time = 0;
+    processes[i].io_remaining_time = 0;
     for (j = 0; j < 10; j++) {
         processes[i].interrupt_time[j] = 0;
     }
@@ -374,6 +381,9 @@ process *Copy_Queue(process *processes, int process_num) {
         copyprocess[i].remaining_time = processes[i].remaining_time;
         copyprocess[i].priority = processes[i].priority;
         copyprocess[i].interrupt = processes[i].interrupt;
+        copyprocess[i].io_burst_time = processes[i].io_burst_time;
+        copyprocess[i].io_remaining_time = processes[i].remaining_time;
+
         if (copyprocess[i].interrupt != 0) { // 0 이 아닌 경우에는 I/O 가 발생하는 시간을 랜덤하게 생성
             // I/O 의 interrupt 횟수만큼 배열을 생성한다.
             for (j = 0; j < copyprocess[i].interrupt; j++) {
@@ -392,20 +402,20 @@ process *Copy_Queue(process *processes, int process_num) {
 void print_process(process *processes, int process_num) {
     int i, j;
     printf("\n** <process> ** \n");
-    printf("_________________________________________________________________________________________________________________________________\n");
-    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |   interrupt time |\n");
-    printf("_________________________________________________________________________________________________________________________________\n");
+    printf("____________________________________________________________________________________________________________________________________\n");
+    printf("| PID | arrive_time | waiting_time | remaining_time | CPU,I/O_burst_time | execution_time | priority | interrupt |  interrupt time |\n");
+    printf("____________________________________________________________________________________________________________________________________\n");
     for (i = 0; i < process_num; i++) {
-        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |",
+        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d   %d       |       %d        |     %d    |     %d     |",
                processes[i].PID, processes[i].arrive_time, processes[i].waiting_time,
-               processes[i].remaining_time, processes[i].cpu_burst_time,
+               processes[i].remaining_time, processes[i].cpu_burst_time, processes[i].io_burst_time,
                processes[i].execution_time, processes[i].priority, processes[i].interrupt);
         for (j = 0; j < processes[i].interrupt; j++) {
             printf(" %d ", processes[i].interrupt_time[j]);
         }
-        printf("|\n");
+        printf("\n");
     }
-    printf("_________________________________________________________________________________________________________________________________\n");
+    printf("____________________________________________________________________________________________________________________________________\n");
     printf("\n");
     printf("\n");
 
@@ -448,7 +458,7 @@ void print_Ready_Queue(process *READY_QUEUE) {
         for (j = 0; j < READY_QUEUE[i].interrupt; j++) {
             printf(" %d ", READY_QUEUE[i].interrupt_time[j]);
         }
-        printf("|\n");
+        printf("\n");
     }
     printf("_________________________________________________________________________________________________________________________________\n");
     printf("\n");
@@ -458,17 +468,17 @@ void print_Waiting_Queue(process *WAITING_QUEUE) {
     int i, j;
     printf("** <Waiting Queue> ** \n");
     printf("_________________________________________________________________________________________________________________________________\n");
-    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |   interrupt time |\n");
+    printf("| PID | arrive_time | waiting_time | remaining_time | I/O_burst_time | execution_time | priority | interrupt |   interrupt time |\n");
     printf("_________________________________________________________________________________________________________________________________\n");
     for (i = 0; WAITING_QUEUE[i].PID != 0; i++) {
         printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |",
                WAITING_QUEUE[i].PID, WAITING_QUEUE[i].arrive_time, WAITING_QUEUE[i].waiting_time,
-               WAITING_QUEUE[i].remaining_time, WAITING_QUEUE[i].cpu_burst_time,
+               WAITING_QUEUE[i].io_remaining_time, WAITING_QUEUE[i].io_burst_time,
                WAITING_QUEUE[i].execution_time, WAITING_QUEUE[i].priority, WAITING_QUEUE[i].interrupt);
         for (j = 0; j < WAITING_QUEUE[i].interrupt; j++) {
             printf(" %d ", WAITING_QUEUE[i].interrupt_time[j]);
         }
-        printf("|\n");
+        printf("\n");
     }
     printf("_________________________________________________________________________________________________________________________________\n");
     printf("\n");
@@ -477,20 +487,20 @@ void print_Waiting_Queue(process *WAITING_QUEUE) {
 void print_Terminated_Queue(process *TERMINATED_QUEUE) {
     int i, j;
     printf("** <Terminated Queue> ** \n");
-    printf("_________________________________________________________________________________________________________________________________\n");
-    printf("| PID | arrive_time | waiting_time | remaining_time | cpu_burst_time | execution_time | priority | interrupt |   interrupt time |\n");
-    printf("_________________________________________________________________________________________________________________________________\n");
+    printf("____________________________________________________________________________________________________________________________________\n");
+    printf("| PID | arrive_time | waiting_time | remaining_time | CPU,I/O_burst_time | execution_time | priority | interrupt |  interrupt time |\n");
+    printf("____________________________________________________________________________________________________________________________________\n");
     for (i = 0; TERMINATED_QUEUE[i].PID != 0; i++) {
-        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d       |       %d        |     %d    |     %d     |",
+        printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d   %d       |       %d        |     %d    |     %d     |",
                TERMINATED_QUEUE[i].PID, TERMINATED_QUEUE[i].arrive_time, TERMINATED_QUEUE[i].waiting_time,
-               TERMINATED_QUEUE[i].remaining_time, TERMINATED_QUEUE[i].cpu_burst_time,
+               TERMINATED_QUEUE[i].remaining_time, TERMINATED_QUEUE[i].cpu_burst_time, TERMINATED_QUEUE[i].io_burst_time,
                TERMINATED_QUEUE[i].execution_time, TERMINATED_QUEUE[i].priority, TERMINATED_QUEUE[i].interrupt);
         for (j = 0; j < TERMINATED_QUEUE[i].interrupt; j++) {
             printf(" %d ", TERMINATED_QUEUE[i].interrupt_time[j]);
         }
-        printf("|\n");
+        printf("\n");
     }
-    printf("_________________________________________________________________________________________________________________________________\n");
+    printf("____________________________________________________________________________________________________________________________________\n");
     printf("\n");
 }
 
