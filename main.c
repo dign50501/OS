@@ -55,6 +55,7 @@ process PEEK_QUEUE(process *processes); // 큐에서 0번째 인덱스 프로세
 void INSERT_QUEUE(process *processes, process temp); // queue의 맨뒤에 삽입
 void DELETE_QUEUE(process *processes); // queue 맨앞 삭제
 int FULL_QUEUE(process *processes, int process_num); // queue의 FULL 여부
+int EMPTY_QUEUE(process *proceeses); // QUEUE의 EMPTY 여부. 1이면 EMPTY
 process context_switching(process *processes, process Running_State); // process 간 context switch
 process *Copy_Queue(process *processes, int process_num); // 큐를 똑같이 복사.
 
@@ -72,8 +73,9 @@ void EVALUATION(int process_num); // 모든 알고리즘 결과 출
 void swap(process *first, process *second); // 두 프로스세스의 위치를 스왑
 
 void SORT_BY_ARRIVAL_TIME(process *processes, int process_num); // 도착시간으로 정렬(빠를수록 앞에)
-
 void SORT_BY_REMAINING_TIME(process *processes, int process_num); // 남은시간으로 정렬(적을수록 앞으로 정렬)
+void SORT_BY_IO_REMAINING_TIME(process *processes, int process_num);
+
 void SORT_BY_PRIORITY(process *processes, int process_num); // 우선수위로 정렬(숫자가 클수록 높음)
 int Is_IO_time(int execution_time, int interrupt, int *interrupt_time); // I/O interrupt
 
@@ -269,7 +271,6 @@ process *Create_Random_Processes(int process_num) {
     // process structure array 생성을 한다
     processes = Create_Queue(process_num); // 프로세스를 저장하기위해 배열을 malloc으로 생성
     for (i = 0; i < process_num; i++) {
-        int j; // for loop
         processes[i].PID = i + 1;
         // 0 ~ 9 사이의 random한 int 값을 갖는다
         processes[i].arrive_time = (rand() % 10);
@@ -281,8 +282,16 @@ process *Create_Random_Processes(int process_num) {
         processes[i].priority = rand() % PRIORITY;
         // 0 ~ cpu burst time - 1 사이의 random한 I/O interrupt 횟수 발생
         processes[i].interrupt = rand() % (processes[i].cpu_burst_time);
+        /*if(processes[i].interrupt > 3){
+            processes[i].interrupt = 3;
+        }*/
         // 1,2,3중 하나의 I/O burst time을 갖는다.
-        processes[i].io_burst_time = rand() % 3 + 1;
+        if (processes[i].interrupt == 0) {
+            processes[i].io_burst_time = 0;
+        } else {
+            processes[i].io_burst_time = rand() % 3 + 1;
+
+        }
         // remaining time은 초기값은 burst time과 동일.
         processes[i].io_remaining_time = processes[i].io_burst_time;
         if (processes[i].interrupt != 0) { // 0 이 아닌 경우에는 I/O 가 발생하는 시간을 랜덤하게 생성
@@ -355,6 +364,16 @@ int FULL_QUEUE(process *processes, int process_num) {
     return 1;
 }
 
+int EMPTY_QUEUE(process *processes) {
+    int i;
+    for (i = 0; processes[i].PID != 0; i++);
+    if (i == 0) {
+        // i = 0 이면 EMPTY이기떄문에
+        return 1;
+    }
+    return 0;
+}
+
 process context_switching(process *processes, process Running_State) {
     if (Running_State.remaining_time != 0) { // 아직 수행해야하는 CPU BURST TIME 존재
         // 수행이 끝나지 않았기 때문에 다시 ready queue에 넣어준다
@@ -382,7 +401,7 @@ process *Copy_Queue(process *processes, int process_num) {
         copyprocess[i].priority = processes[i].priority;
         copyprocess[i].interrupt = processes[i].interrupt;
         copyprocess[i].io_burst_time = processes[i].io_burst_time;
-        copyprocess[i].io_remaining_time = processes[i].remaining_time;
+        copyprocess[i].io_remaining_time = processes[i].io_remaining_time;
 
         if (copyprocess[i].interrupt != 0) { // 0 이 아닌 경우에는 I/O 가 발생하는 시간을 랜덤하게 생성
             // I/O 의 interrupt 횟수만큼 배열을 생성한다.
@@ -493,7 +512,8 @@ void print_Terminated_Queue(process *TERMINATED_QUEUE) {
     for (i = 0; TERMINATED_QUEUE[i].PID != 0; i++) {
         printf("| %2d  |     %2d      |      %2d      |       %2d       |        %d   %d       |       %d        |     %d    |     %d     |",
                TERMINATED_QUEUE[i].PID, TERMINATED_QUEUE[i].arrive_time, TERMINATED_QUEUE[i].waiting_time,
-               TERMINATED_QUEUE[i].remaining_time, TERMINATED_QUEUE[i].cpu_burst_time, TERMINATED_QUEUE[i].io_burst_time,
+               TERMINATED_QUEUE[i].remaining_time, TERMINATED_QUEUE[i].cpu_burst_time,
+               TERMINATED_QUEUE[i].io_burst_time,
                TERMINATED_QUEUE[i].execution_time, TERMINATED_QUEUE[i].priority, TERMINATED_QUEUE[i].interrupt);
         for (j = 0; j < TERMINATED_QUEUE[i].interrupt; j++) {
             printf(" %d ", TERMINATED_QUEUE[i].interrupt_time[j]);
@@ -531,7 +551,8 @@ void PRINT_RESULT(process *TERMINATED_QUEUE, int process_num, int algo) {
         AWT += TERMINATED_QUEUE[i].waiting_time;
         average_CPU_burst_time += TERMINATED_QUEUE[i].cpu_burst_time;
         // Turn around time: CPU burst time + waiting time + interrupt(I/O interrupt는 1 단위시간으로 가 )
-        ATT += (TERMINATED_QUEUE[i].waiting_time + TERMINATED_QUEUE[i].cpu_burst_time + TERMINATED_QUEUE[i].interrupt);
+        ATT += (TERMINATED_QUEUE[i].waiting_time + TERMINATED_QUEUE[i].cpu_burst_time +
+                TERMINATED_QUEUE[i].io_burst_time);
     }
     printf("\n");
     printf("______________________________________________________________________________________________________________\n");
@@ -726,6 +747,17 @@ void SORT_BY_REMAINING_TIME(process *processes, int process_num) {
     }
 }
 
+void SORT_BY_IO_REMAINING_TIME(process *processes, int process_num) {
+    int i, j; // For loop
+    for (i = 0; i < process_num; i++) {
+        for (j = 0; j < process_num - (i + 1); j++) {
+            if (processes[j].io_remaining_time > processes[j + 1].io_remaining_time) {
+                swap(&processes[j], &processes[j + 1]); // 버블소트를하기위해 두구조체의 값을 swap.
+            }
+        }
+    }
+}
+
 // 우선순위로 정렬. 높은 숫자가 우선수위가 더 높다.
 void SORT_BY_PRIORITY(process *processes, int process_num) {
     int i, j; // For loop
@@ -753,7 +785,7 @@ int Is_IO_time(int execution_time, int interrupt, int *interrupt_time) {
     return flag;
 }
 
-int get_ready_queue_length(process *READY_QUEUE) {
+int get_queue_length(process *READY_QUEUE) {
     int i;
     // process의 PID가 0인곳에 넣기 위해서.
     for (i = 0; READY_QUEUE[i].PID != 0; i++);
@@ -762,7 +794,7 @@ int get_ready_queue_length(process *READY_QUEUE) {
 }
 
 void FCFS(process *processes, int process_num) {
-    int j, k; // i: processes의 index를 access하기 위해, j: for loop에서 사용, k: for loop
+    int j, k, l; // i: processes의 index를 access하기 위해, j: for loop에서 사용, k: for loop
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
     // 인자로 들어온 processes의 값들은 바꾸지 않고 사용하기 위해 복사를 해서 사용.
@@ -788,13 +820,22 @@ void FCFS(process *processes, int process_num) {
             }
 
         }
-        if (WAITING_QUEUE[0].PID != EMPTY) {
+
+        if (!EMPTY_QUEUE(WAITING_QUEUE)) {
             // waiting queue가 비어있지않은경우
             // PID가 0 이면 비어있는 것
-            // 이거 필요없을 거같은데 일단 둠.
-            //   WAITING_QUEUE[0].remaining_time --;
-            INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
-            DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+            SORT_BY_IO_REMAINING_TIME(WAITING_QUEUE, get_queue_length(WAITING_QUEUE)); // 남은 시간으로 정렬
+
+            int temp = get_queue_length(WAITING_QUEUE);
+            for (l = 0; l < temp; l++) {
+                if (PEEK_QUEUE(WAITING_QUEUE).io_remaining_time == 0) {
+                    WAITING_QUEUE[0].io_remaining_time = WAITING_QUEUE[0].io_burst_time;
+                    INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
+                    DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+                }
+            }
+
+
         }
 
         // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우
@@ -807,12 +848,10 @@ void FCFS(process *processes, int process_num) {
                 Running_state = context_switching(READY_QUEUE, Running_state);
 
             }
-            // context switch 구현
         }
         // I/O interrupt가 발생하는 경우.
         if (Running_state.interrupt >= 1 &&
             Is_IO_time(Running_state.execution_time, Running_state.interrupt, Running_state.interrupt_time)) {
-
             INSERT_QUEUE(WAITING_QUEUE, Running_state);
             Running_state = Initialization_Running_state();
             if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
@@ -831,9 +870,13 @@ void FCFS(process *processes, int process_num) {
 
         Running_state.execution_time++; // 현재 CPU에서 실행중인 프로세스가 실행한시간을 1단위시간만큼 올림
         Running_state.remaining_time--; // 1단위시간만큼 CPU burst time에서 남은시간.
+
         gantt[TIME_PAST] = Running_state.PID;
         for (j = 0; READY_QUEUE[j].PID != 0; j++) {
             READY_QUEUE[j].waiting_time++; // ready queue에 있는 프로세스들은 실행을 하지 않았으므로 waiting time++
+        }
+        for (l = 0; WAITING_QUEUE[l].PID != 0; l++) {
+            WAITING_QUEUE[l].io_remaining_time--;
         }
         TIME_PAST++; // 한번의 while문당 1 단위시간이 지나감
     }
@@ -862,10 +905,11 @@ void FCFS(process *processes, int process_num) {
 }
 
 void PSJF(process *processes, int process_num) {
-    int j, k;
+    int j, k, l;
     int READY_QUEUE_LENGTH = 0;
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
+    int waiting_queue_num = 0;
     /* Queue 생성 */
     process *PSJF_processes = Copy_Queue(processes, process_num); // 큐 복사(deep)
     process *READY_QUEUE = Create_Queue(process_num); // Ready queue. 모두 0으로 초기화
@@ -887,19 +931,29 @@ void PSJF(process *processes, int process_num) {
             }
         }
 
-        if (PEEK_QUEUE(WAITING_QUEUE).PID != EMPTY) {
+        if (!EMPTY_QUEUE(WAITING_QUEUE)) {
             // waiting queue가 비어있지않은경우
             // PID가 0 이면 비어있는 것
-            INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
-            DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+            SORT_BY_IO_REMAINING_TIME(WAITING_QUEUE, get_queue_length(WAITING_QUEUE)); // 남은 시간으로 정렬
+
+            int temp = get_queue_length(WAITING_QUEUE);
+            for (l = 0; l < temp; l++) {
+                if (PEEK_QUEUE(WAITING_QUEUE).io_remaining_time == 0) {
+                    WAITING_QUEUE[0].io_remaining_time = WAITING_QUEUE[0].io_burst_time;
+                    INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
+                    DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+                }
+            }
+
+
         }
         // Preemptive shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
-        READY_QUEUE_LENGTH = get_ready_queue_length(READY_QUEUE);
+        READY_QUEUE_LENGTH = get_queue_length(READY_QUEUE);
         SORT_BY_REMAINING_TIME(READY_QUEUE, READY_QUEUE_LENGTH);
         // I/O Request가 발생하는 경우.
         if (Running_state.interrupt >= 1 &&
             Is_IO_time(Running_state.execution_time, Running_state.interrupt, Running_state.interrupt_time)) {
-
+            waiting_queue_num++;
             INSERT_QUEUE(WAITING_QUEUE, Running_state);
             Running_state = Initialization_Running_state();
             if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
@@ -920,6 +974,11 @@ void PSJF(process *processes, int process_num) {
         } else if (Running_state.remaining_time > PEEK_QUEUE(READY_QUEUE).remaining_time) {
             // 만약에 Running state의 남은시간보다 레디 큐에 있는 제일 작은 남은 시간이 더 작은 경우 switch
             Running_state = context_switching(READY_QUEUE, Running_state);
+        } else if (Running_state.remaining_time == PEEK_QUEUE(READY_QUEUE).remaining_time) {
+            if (Running_state.priority < PEEK_QUEUE(READY_QUEUE).priority) {
+                Running_state = context_switching(READY_QUEUE, Running_state);
+
+            }
         }
 
 
@@ -937,6 +996,10 @@ void PSJF(process *processes, int process_num) {
         gantt[TIME_PAST] = Running_state.PID;
         for (j = 0; READY_QUEUE[j].PID != 0; j++) {
             READY_QUEUE[j].waiting_time++; // ready queue에 있는 프로세스들은 실행을 하지 않았으므로 waiting time++
+        }
+
+        for (l = 0; WAITING_QUEUE[l].PID != 0; l++) {
+            WAITING_QUEUE[l].io_remaining_time--;
         }
         TIME_PAST++; // 한번의 while문당 1 단위시간이 지나감
 
@@ -966,7 +1029,7 @@ void PSJF(process *processes, int process_num) {
 }
 
 void NSJF(process *processes, int process_num) {
-    int j, k; //for loop
+    int j, k, l; //for loop
     int READY_QUEUE_LENGTH = 0;
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
@@ -990,14 +1053,25 @@ void NSJF(process *processes, int process_num) {
             }
         }
 
-        if (PEEK_QUEUE(WAITING_QUEUE).PID != EMPTY) {
+
+        if (!EMPTY_QUEUE(WAITING_QUEUE)) {
             // waiting queue가 비어있지않은경우
             // PID가 0 이면 비어있는 것
-            INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
-            DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+            SORT_BY_IO_REMAINING_TIME(WAITING_QUEUE, get_queue_length(WAITING_QUEUE)); // 남은 시간으로 정렬
+
+            int temp = get_queue_length(WAITING_QUEUE);
+            for (l = 0; l < temp; l++) {
+                if (PEEK_QUEUE(WAITING_QUEUE).io_remaining_time == 0) {
+                    WAITING_QUEUE[0].io_remaining_time = WAITING_QUEUE[0].io_burst_time;
+                    INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
+                    DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+                }
+            }
+
+
         }
         // Preemptive shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
-        READY_QUEUE_LENGTH = get_ready_queue_length(READY_QUEUE);
+        READY_QUEUE_LENGTH = get_queue_length(READY_QUEUE);
         SORT_BY_PRIORITY(READY_QUEUE, READY_QUEUE_LENGTH);
         // I/O Request가 발생하는 경우.
         if (Running_state.interrupt >= 1 &&
@@ -1037,6 +1111,9 @@ void NSJF(process *processes, int process_num) {
         for (j = 0; READY_QUEUE[j].PID != 0; j++) {
             READY_QUEUE[j].waiting_time++; // ready queue에 있는 프로세스들은 실행을 하지 않았으므로 waiting time++
         }
+        for (l = 0; WAITING_QUEUE[l].PID != 0; l++) {
+            WAITING_QUEUE[l].io_remaining_time--;
+        }
         TIME_PAST++; // 한번의 while문당 1 단위시간이 지나감
 
 
@@ -1065,7 +1142,7 @@ void NSJF(process *processes, int process_num) {
 }
 
 void PPRI(process *processes, int process_num) {
-    int j, k; //for loop
+    int j, k, l; //for loop
     int READY_QUEUE_LENGTH = 0;
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
@@ -1089,14 +1166,25 @@ void PPRI(process *processes, int process_num) {
             }
         }
 
-        if (PEEK_QUEUE(WAITING_QUEUE).PID != EMPTY) {
+
+        if (!EMPTY_QUEUE(WAITING_QUEUE)) {
             // waiting queue가 비어있지않은경우
             // PID가 0 이면 비어있는 것
-            INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
-            DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+            SORT_BY_IO_REMAINING_TIME(WAITING_QUEUE, get_queue_length(WAITING_QUEUE)); // 남은 시간으로 정렬
+
+            int temp = get_queue_length(WAITING_QUEUE);
+            for (l = 0; l < temp; l++) {
+                if (PEEK_QUEUE(WAITING_QUEUE).io_remaining_time == 0) {
+                    WAITING_QUEUE[0].io_remaining_time = WAITING_QUEUE[0].io_burst_time;
+                    INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
+                    DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+                }
+            }
+
+
         }
         // Preemptive shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
-        READY_QUEUE_LENGTH = get_ready_queue_length(READY_QUEUE);
+        READY_QUEUE_LENGTH = get_queue_length(READY_QUEUE);
         SORT_BY_PRIORITY(READY_QUEUE, READY_QUEUE_LENGTH);
         // I/O Request가 발생하는 경우.
         if (Running_state.interrupt >= 1 &&
@@ -1140,6 +1228,9 @@ void PPRI(process *processes, int process_num) {
         for (j = 0; READY_QUEUE[j].PID != 0; j++) {
             READY_QUEUE[j].waiting_time++; // ready queue에 있는 프로세스들은 실행을 하지 않았으므로 waiting time++
         }
+        for (l = 0; WAITING_QUEUE[l].PID != 0; l++) {
+            WAITING_QUEUE[l].io_remaining_time--;
+        }
         TIME_PAST++; // 한번의 while문당 1 단위시간이 지나감
 
 
@@ -1168,7 +1259,7 @@ void PPRI(process *processes, int process_num) {
 }
 
 void NPRI(process *processes, int process_num) {
-    int j, k; //for loop
+    int j, k, l; //for loop
     int READY_QUEUE_LENGTH = 0;
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
@@ -1192,14 +1283,25 @@ void NPRI(process *processes, int process_num) {
             }
         }
 
-        if (PEEK_QUEUE(WAITING_QUEUE).PID != EMPTY) {
+
+        if (!EMPTY_QUEUE(WAITING_QUEUE)) {
             // waiting queue가 비어있지않은경우
             // PID가 0 이면 비어있는 것
-            INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
-            DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+            SORT_BY_IO_REMAINING_TIME(WAITING_QUEUE, get_queue_length(WAITING_QUEUE)); // 남은 시간으로 정렬
+
+            int temp = get_queue_length(WAITING_QUEUE);
+            for (l = 0; l < temp; l++) {
+                if (PEEK_QUEUE(WAITING_QUEUE).io_remaining_time == 0) {
+                    WAITING_QUEUE[0].io_remaining_time = WAITING_QUEUE[0].io_burst_time;
+                    INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
+                    DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+                }
+            }
+
+
         }
         // Preemptive shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
-        READY_QUEUE_LENGTH = get_ready_queue_length(READY_QUEUE);
+        READY_QUEUE_LENGTH = get_queue_length(READY_QUEUE);
         SORT_BY_PRIORITY(READY_QUEUE, READY_QUEUE_LENGTH);
         // I/O request가 발생하는 경우.
         if (Running_state.interrupt >= 1 &&
@@ -1240,6 +1342,9 @@ void NPRI(process *processes, int process_num) {
         for (j = 0; READY_QUEUE[j].PID != 0; j++) {
             READY_QUEUE[j].waiting_time++; // ready queue에 있는 프로세스들은 실행을 하지 않았으므로 waiting time++
         }
+        for (l = 0; WAITING_QUEUE[l].PID != 0; l++) {
+            WAITING_QUEUE[l].io_remaining_time--;
+        }
         TIME_PAST++; // 한번의 while문당 1 단위시간이 지나감
 
 
@@ -1269,9 +1374,9 @@ void NPRI(process *processes, int process_num) {
 }
 
 void RR(process *processes, int process_num) {
-    int j, k;
+    int j, k, l;
+    int waiting_queue_num = 0;
     int time_quantum; // time quantum of RR
-    int flag = 1;
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
     /* Queue 생성 */
@@ -1299,26 +1404,25 @@ void RR(process *processes, int process_num) {
             }
         }
 
-        if (PEEK_QUEUE(WAITING_QUEUE).PID != EMPTY) {
+        if (!EMPTY_QUEUE(WAITING_QUEUE)) {
             // waiting queue가 비어있지않은경우
             // PID가 0 이면 비어있는 것
-            // 이거 필요없을 거같은데 일단 둠.
-            INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
-            DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+            SORT_BY_IO_REMAINING_TIME(WAITING_QUEUE, waiting_queue_num); // 남은 시간으로 정렬
+
+            int temp = waiting_queue_num;
+            for (l = 0; l < temp; l++) {
+                if (PEEK_QUEUE(WAITING_QUEUE).io_remaining_time == 0) {
+                    WAITING_QUEUE[0].io_remaining_time = WAITING_QUEUE[0].io_burst_time;
+                    INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(WAITING_QUEUE)); // waiting queue의 첫 element를 ready queue에 넣어줌.
+                    DELETE_QUEUE(WAITING_QUEUE); // ready queue로 옮겼으므로 지워준다
+                    waiting_queue_num--;
+                }
+            }
+
+
         }
 
-        // I/O request가 발생하는 경우.
-        if (Running_state.interrupt >= 1 &&
-            Is_IO_time(Running_state.execution_time, Running_state.interrupt, Running_state.interrupt_time)) {
-            INSERT_QUEUE(WAITING_QUEUE, Running_state);
-            Running_state = Initialization_Running_state();
-            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
-                Running_state = context_switching(READY_QUEUE, Running_state);
-                // flag = 0이라는 것은 이미 CPU가 context switch를 했으므로 한번은 실행 해줘야함.
-                // 밑의 코드중 else if (Running_state.execution_time % time_quantum == 0 && flag == 1)을 실행안시키기 위해
-                flag = 0;
-            }
-        }
+
 
         // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우 혹은 비어있는 경
         if (Running_state.remaining_time <= 0) {
@@ -1330,10 +1434,20 @@ void RR(process *processes, int process_num) {
                 Running_state = context_switching(READY_QUEUE, Running_state);
 
             }
-        } else if (Running_state.execution_time % time_quantum == 0 && flag == 1) {
+        } else if (Running_state.execution_time % time_quantum == 0) {
             Running_state = context_switching(READY_QUEUE, Running_state);
         }
 
+        // I/O request가 발생하는 경우.
+        if (Running_state.interrupt >= 1 &&
+            Is_IO_time(Running_state.execution_time, Running_state.interrupt, Running_state.interrupt_time)) {
+            waiting_queue_num++;
+            INSERT_QUEUE(WAITING_QUEUE, Running_state);
+            Running_state = Initialization_Running_state();
+            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
+                Running_state = context_switching(READY_QUEUE, Running_state);
+            }
+        }
 
         printf("[Round Robin]\n");
         print_process(processes, process_num);
@@ -1346,12 +1460,15 @@ void RR(process *processes, int process_num) {
 
         Running_state.execution_time++; // 현재 CPU에서 실행중인 프로세스가 실행한시간을 1단위시간만큼 올림
         Running_state.remaining_time--; // 1단위시간만큼 CPU burst time에서 남은시간.
+
+        for (l = 0; WAITING_QUEUE[l].PID != 0; l++) {
+            WAITING_QUEUE[l].io_remaining_time--;
+        }
         gantt[TIME_PAST] = Running_state.PID;
         for (j = 0; READY_QUEUE[j].PID != 0; j++) {
             READY_QUEUE[j].waiting_time++; // ready queue에 있는 프로세스들은 실행을 하지 않았으므로 waiting time++
         }
         TIME_PAST++; // 한번의 while문당 1 단위시간이 지나감
-
 
     }
     TIME_PAST--; // 앞에서 끝이 났는데 1을 증가시켜놨으므로 다시 1 줄여줌.
@@ -1366,7 +1483,8 @@ void RR(process *processes, int process_num) {
         result[_RR].sum_waiting_time += TERMINATED_QUEUE[k].waiting_time;
         result[_RR].sum_cpu_burst_time += TERMINATED_QUEUE[k].cpu_burst_time;
         result[_RR].sum_turn_around_time +=
-                (TERMINATED_QUEUE[k].waiting_time + TERMINATED_QUEUE[k].cpu_burst_time) + TERMINATED_QUEUE[k].interrupt;
+                (TERMINATED_QUEUE[k].waiting_time + TERMINATED_QUEUE[k].cpu_burst_time +
+                 TERMINATED_QUEUE[k].io_burst_time);
     }
     result[_RR].avg_cpu_burst_time = (float) result[_RR].sum_cpu_burst_time / process_num;
     result[_RR].AWT = (float) result[_RR].sum_waiting_time / process_num;
@@ -1376,6 +1494,3 @@ void RR(process *processes, int process_num) {
     free(TERMINATED_QUEUE);
     free(WAITING_QUEUE);
 }
-
-
-
