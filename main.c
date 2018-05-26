@@ -638,7 +638,7 @@ void PRINT_RESULT(process *TERMINATED_QUEUE, int process_num, int algo) {
             printf("1. Algorithm: Highest Response Ratio Next");
             break;
         case _MLQ:
-            printf("1. Algorithm: Multilevel Queue");
+            printf("1. Algorithm: Multilevel Feedback Queue");
             break;
         default:
             break;
@@ -1058,7 +1058,7 @@ void PSJF(process *processes, int process_num) {
             // 만약에 Running state의 남은시간보다 레디 큐에 있는 제일 작은 남은 시간이 더 작은 경우 switch
             Running_state = context_switching(READY_QUEUE, Running_state);
         } else if (Running_state.remaining_time == PEEK_QUEUE(READY_QUEUE).remaining_time) {
-            if (Running_state.priority < PEEK_QUEUE(READY_QUEUE).priority) {
+            if (Running_state.arrive_time > PEEK_QUEUE(READY_QUEUE).arrive_time) {
                 Running_state = context_switching(READY_QUEUE, Running_state);
 
             }
@@ -1751,10 +1751,6 @@ void MLQ(process *processes, int process_num) {
 
     while (!FULL_QUEUE(TERMINATED_QUEUE, process_num)) {
 
-        SORT_BY_ARRIVAL_TIME(system_processes, len_sys); // 도착 순서대로 정렬
-        SORT_BY_ARRIVAL_TIME(interactive_processes, len_int); // 도착 순서대로 정렬
-        SORT_BY_ARRIVAL_TIME(batch_processes, len_batch); // 도착 순서대로 정렬
-
         while (PEEK_QUEUE(copy).PID != EMPTY) {
             if (PEEK_QUEUE(copy).arrive_time != TIME_PAST) {
                 // 만약 프로세스의 도착시간이 현재시간과 다르면 레디큐에 넣지 않음
@@ -1768,7 +1764,7 @@ void MLQ(process *processes, int process_num) {
                     copy[0].priority = 5;
                     INSERT_QUEUE(interactive_processes, PEEK_QUEUE(copy));
                 } else if (PEEK_QUEUE(copy).interrupt >= 2) {
-
+                    copy[0].priority = 5;
                     INSERT_QUEUE(interactive_processes, PEEK_QUEUE(copy));
                 } else {
                     copy[0].priority = 0;
@@ -1778,6 +1774,7 @@ void MLQ(process *processes, int process_num) {
             }
 
         }
+
 
         if (!EMPTY_QUEUE(WAITING_QUEUE)) {
             // waiting queue가 비어있지않은경우
@@ -1903,12 +1900,37 @@ void MLQ(process *processes, int process_num) {
         for (j = 0; batch_processes[j].PID != 0; j++) {
             batch_processes[j].waiting_time++; // ready queue에 있는 프로세스들은 실행을 하지 않았으므로 waiting time++
         }
+
+        for (l = 0; interactive_processes[l].PID != 0; l++) {
+            interactive_processes[l].aging++;
+            if (interactive_processes[l].aging >= 10) {
+                interactive_processes[l].priority = 10;
+                interactive_processes[l].aging = 0;
+            }
+        }
+        if (PEEK_QUEUE(interactive_processes).priority == 10) {
+            INSERT_QUEUE(system_processes, interactive_processes[0]);
+            DELETE_QUEUE(interactive_processes);
+        }
+        for (l = 0; batch_processes[l].PID != 0; l++) {
+            batch_processes[l].aging++;
+            if (batch_processes[l].aging >= 15) {
+                batch_processes[l].priority = 5;
+                batch_processes[l].aging = 0;
+            }
+        }
+        if (PEEK_QUEUE(batch_processes).priority == 5) {
+            INSERT_QUEUE(interactive_processes, batch_processes[0]);
+            DELETE_QUEUE(batch_processes);
+        }
+
+
         TIME_PAST++;
     }
 
     TIME_PAST--;
 
-    PRINT_RESULT(TERMINATED_QUEUE, process_num, _RR);
+    PRINT_RESULT(TERMINATED_QUEUE, process_num, _MLQ);
     free(interactive_processes);
     free(system_processes);
     free(batch_processes);
