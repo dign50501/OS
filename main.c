@@ -16,21 +16,19 @@
 #define _AGING_PREEMPT_PRIORITY 6
 #define _HRRN 7 /* Highest Response Ratio Next */
 #define _MLQ 8
-#define _MLFQ 9
-#define LISC 10
 
 /* 한개의 Process structure */
 typedef struct {
     int PID; // 프로세스 ID(생성된 순서로 입력된다) PID = 1~10
     int arrive_time; // 프로세스가 생성돼서 ready queue에 올라가게 되는 시간
-    int waiting_time; // 프로세스의 waiting time
+    int waiting_time; // 프로세스의 waiting time 저장하기 위해서
     int cpu_burst_time; // 프로세스가 CPU를 사용하는 시간 (CPU burst time)
-    int io_burst_time; // 프로세스가 I/O device에서 소모하는 시간
+    int io_burst_time; // 프로세스가 I/O device에서 사용하는 시간
     int execution_time; // 프로세스가 특정 시점까지 CPU에서 실행한 시간
     int remaining_time; // cpu burst time - execution time. 프로세스가 종료될때까지 남은 시간
     int io_remaining_time; // I/O device에 프로세스가 소모해야하는 남은 시간
     int priority; // 프로세스의 우선순위. Priority의 값이 높을 수록 실행이 먼저 된다.
-    int interrupt; // I/O operation 존재여부 - 0 이면 없음, 1이면 1번, 2이면 2번, 3이면 3번.
+    int interrupt; // I/O request 존재여부 - 0 이면 없음, 1이면 1번, 2이면 2번, 3이면 3번,...
     int interrupt_time[10]; // I/O operation이 발생하는 시점
     int aging; // aging 기법을 사용하기 위해 추가
 
@@ -46,23 +44,25 @@ typedef struct {
     int sum_turn_around_time; // turn around time 합
     float ATT; // Average Turnaround Time
 
-} Process_Result; // 프로레스 결과물 출력
+} Process_Result; // CPU simulation 결과 저장 구조체
 
 /* 사용자 인터페이스*/
-int Menu(void); // 프로세스 생성 및 스케쥴링
-int get_num_process(void); // 몇개의 프로세스를 생성할지 정해주는 함수
+int Menu(void); // 프로세스 생성 및 스케쥴링 선택
+int get_num_process(void); // 몇개의 프로세스를 생성할지 입력받는 함수
 
 /* queue에 관련된 함수 모음 */
 process Initialization_Running_state(); // Running state의 모든 값을 0으로 초기화
-void Create_Random_IO(int *interrupt_time, int interrupt, int cpu_burst_time); // I/O operation 발생 시간을 랜덤하게 생성
+void Create_Random_IO(int *interrupt_time, int interrupt, int cpu_burst_time); // I/O request 발생 시간을 랜덤하게 생성
 process *Create_Random_Processes(int process_num);// 프로세스를 process_num만큼 랜덤하게 생성
 process *Create_Queue(int process_num); // process 저장 할 수 있는 queue 생성 (waiting queue, ready queue, terminated queue)
-process PEEK_QUEUE(process *processes); // 큐에서 0번째 인덱스 프로세스를 가져옴
+process PEEK_QUEUE(process *processes); // 큐에서 첫번째(0번째) 인덱스 프로세스를 가져옴
 void INSERT_QUEUE(process *processes, process temp); // queue의 맨 뒤에 삽입
-void DELETE_QUEUE(process *processes); // queue 맨 앞 삭제
-int FULL_QUEUE(process *processes, int process_num); // queue의 FULL 여부
+void DELETE_QUEUE(process *processes); // queue 맨 앞 삭제 및 나머지 원소들 한칸씩 앞으로 이동
+int FULL_QUEUE(process *processes, int process_num); // queue의 FULL 여부. 1이변 FULL
 int EMPTY_QUEUE(process *processes); // QUEUE의 EMPTY 여부. 1이면 EMPTY
-process context_switching(process *processes, process Running_State); // process 간 context switch
+// Running_state에 있던 프로세스는 processes의 맨 뒤로 옮기고 Running_State에 processes의 맨 처음 프로세스를 올림.
+process context_switching(process *processes, process Running_State);
+
 process *Copy_Queue(process *processes, int process_num); // 큐를 똑같이 복사.
 
 /* 출력하는 함수들 모음*/
@@ -72,19 +72,18 @@ void print_Ready_Queue(process *READY_QUEUE); // Ready queue 상태 출력
 void print_Waiting_Queue(process *WAITING_QUEUE); // waiting queue 상태 출력
 void print_Terminated_Queue(process *TERMINATED_QUEUE); // 종료된 프로세스들의 상태 출력
 void print_Gantt_Chart(int TIME_PAST); // 간트차트 출력
-void PRINT_RESULT(process *TERMINATED_QUEUE, int process_num, int algo); // 알고리즘마다 출력
-void save_result(process *TERMINATED_QUEUE, int process_num, int algo); // 결과 저장
-void EVALUATION(int process_num); // 모든 알고리즘 결과 출력
+void PRINT_RESULT(process *TERMINATED_QUEUE, int process_num, int algo); // simulation 결과 출력
+void save_result(process *TERMINATED_QUEUE, int process_num, int algo); // simulation 결과 저장
+void EVALUATION(); // FCFS, SJF, PRIORITY, RR simulation 결과 출력.
 
-//sort algorithm
+/* sorting algorithm */
 void swap(process *first, process *second); // 두 프로세스의 위치를 스왑: [1 2] -> [2 1]
-
 void SORT_BY_ARRIVAL_TIME(process *processes, int process_num); // 도착시간으로 정렬(빠를수록 앞에)
 void SORT_BY_REMAINING_TIME(process *processes, int process_num); // 남은 시간으로 정렬(짧을수록 앞으로 정렬)
 void SORT_BY_IO_REMAINING_TIME(process *processes, int process_num); //남은 시간으로 정렬 (짧을수록 앞으로 정렬)
+void SORT_BY_HRRN(process *processes, int process_num); // HRRN에서 사용
+void SORT_BY_PRIORITY(process *processes, int process_num); // 우선순위로 정렬(숫자가 클수록 앞으로 정렬)
 
-void SORT_BY_HRRN(process *processes, int process_num); // HRRN 쓰기위해서
-void SORT_BY_PRIORITY(process *processes, int process_num); // 우선수위로 정렬(숫자가 클수록 높음)
 int Is_IO_time(int execution_time, int interrupt, int *interrupt_time); // I/O operation 수행하는 시간인지 Check
 
 /* algorithm */
@@ -97,8 +96,9 @@ void RR(process *processes, int process_num); // ROUND ROBIN
 void AGPPRI(process *processes, int process_num); // AGING PREEMPTIVE PRIORITY JOB FIRST
 void HRRN(process *processes, int process_num); // HIGHEST RESPONSE RATIO NEXT
 void MLQ(process *processes, int process_num); // MULTILEVEL QUEUE
+
 /* 전역 변수 */
-int TIME_PAST; // 현재까지 진행된 시간
+int TIME_PAST; // 하나의 CPU simulation에서 현재까지 진행된 시간
 process Running_state; // running state
 int CONTEXT_SWITCH = 0; // context switch가 발생한 횟수
 int gantt[100] = {0}; // 간트차트를 만들기위해 배열을 선언함.
@@ -120,20 +120,20 @@ int Menu(void) {
     int is_executed[10] = {0}; // 각각의 알고리즘을 실행했는지에 대한 여부. 0이면 실행안함 1이면 실행함.
     printf("운영체제 텀 프로젝트 - CPU Scheduling Simulator\n");
     printf("정보대학 컴퓨터학과 2015410118 오영진\n");
-    process_num = get_num_process(); // 프로세스의 개수를 입력받아서 가져옴.
+    process_num = get_num_process(); // 생성할 프로세스의 개수를 입력
     // 입력받은 프로세스의 갯수만큼 랜덤한 프로세스를 생성한다.
     process *processes = Create_Random_Processes(process_num);
-    print_process(processes, process_num); // 생성된 랜덤한 프로세스들의 상태를 print한다.
+    print_process(processes, process_num); // 생성된 랜덤한 프로세스들의 상태를 출력한다.
 
     while (1) {
         printf("\n");
-        printf("어느 스케쥴링을 선택하시겠습니까?(1~6으로 선택)\n");
-        printf("7번은 모든 scheduling 평가, 8번은 프로세스 초기화 및 재시작입니다.\n\n");
+        printf("어느 스케쥴링을 선택하시겠습니까?(1 ~ 11로 선택)\n");
+        printf("7번은 FCFS,SJF,Priority, RR scheduling 평가,\n8번은 프로세스 초기화 및 재시작입니다.\n\n");
         while (1) {
-            if (is_executed[0] == 0) {
+            if (is_executed[0] == 0) { // FCFS를 실행한적이 없으면
                 printf("[1] First Come First Served Scheduling \n");
                 printf("_____________________________________________________\n");
-            } else {
+            } else { // FCFS를 실행한 경
                 printf("[1] Evaluated First Come First Served Scheduling \n");
                 printf("_____________________________________________________\n");
             }
@@ -185,8 +185,8 @@ int Menu(void) {
             printf("[10] Additional Algorithm - Highest response ratio next\n");
             printf("_____________________________________________________\n");
             printf("[11] Additional Algorithm - Multilevel Queue\n");
-
-            printf("[] EXIT\n");
+            printf("_____________________________________________________\n");
+            printf("[12] EXIT\n");
             printf("\n");
             printf("-> 어떤 메뉴를 선택할까요? : ");
             scanf("%d", &menu_selection); // 어떤 알고리즘을 evaluate 할지 선택(1~6) 또는 추가 구현알고리즘(9 ~ )
@@ -239,7 +239,7 @@ int Menu(void) {
             case 7:
                 print_process(processes, process_num);
                 printf("\n");
-                EVALUATION(process_num);
+                EVALUATION();
                 break;
             case 8: // 프로세스를 다시 생성하여 처음부터 다시 시작한다.
                 memset(result, 0, sizeof(Process_Result) * 6);
@@ -303,10 +303,10 @@ process Initialization_Running_state() {
 void Create_Random_IO(int *interrupt_time, int interrupt, int cpu_burst_time) {
     int i, j; // for loop
     int flag; // 중복 생성을 막기위해
-    // interrupt 변수만큼 횟수만큼 배열을 생성
-    for (i = 0; i < interrupt; i++) { // I/O operation 발생 횟수만큼 생성
+
+    for (i = 0; i < interrupt; i++) { // I/O operation 발생 횟수만큼 랜덤한 숫자 생성
         while (1) {
-            // 1 ~ cpu_burst_time - 1 사이의 값 -> 이 시간에 I/O operation이 발생
+            // 1 ~ cpu_burst_time - 1 사이의 값 -> 이 시간에 I/O request가 발생
             interrupt_time[i] = rand() % (cpu_burst_time - 1) + 1;
             flag = 0;
             for (j = 0; j < i; j++) {
@@ -331,24 +331,23 @@ process *Create_Random_Processes(int process_num) {
     for (i = 0; i < process_num; i++) {
         processes[i].PID = i + 1;
         processes[i].arrive_time = (rand() % 10); // 0 ~ 9 사이의 random한 int 값을 갖는다
-        processes[i].cpu_burst_time = (rand() % 9) + 1; // 1~ 10 사이의 random한 CPU burst time
+        processes[i].cpu_burst_time = (rand() % 9) + 1; // 1~ 9 사이의 random한 CPU burst time
         // remaining_time의 초기값은 arrive_time과 동일해야한다.
         processes[i].remaining_time = processes[i].cpu_burst_time;
         processes[i].priority = rand() % PRIORITY; // 각 프로세스에 우선순위 부여. 0 ~ PRIORITY- 1 까지 가능.
         processes[i].aging = 0;
         // 0 ~ cpu burst time - 1 사이의 random한 I/O operation 횟수 발생
         processes[i].interrupt = rand() % (processes[i].cpu_burst_time);
-        // 1,2,3중 하나의 I/O burst time을 갖는다.
         if (processes[i].interrupt == 0) {
-            processes[i].io_burst_time = 0;
+            processes[i].io_burst_time = 0; // I/O request가 없으므로
         } else {
-            processes[i].io_burst_time = rand() % 3 + 1;
+            processes[i].io_burst_time = rand() % 3 + 1; // 1 ~ 3 사이의 random I/O burst time
 
         }
-        // remaining time은 초기값은 burst time과 동일.
+        // I/O remaining time은 초기값은 I/O burst time과 동일.
         processes[i].io_remaining_time = processes[i].io_burst_time;
-        if (processes[i].interrupt != 0) { // 0 이 아닌 경우에는 I/O 가 발생하는 시간을 랜덤하게 생성
-            // I/O operation 횟수만큼 발생하는 시간을 배열에 저장한다.
+        if (processes[i].interrupt != 0) { // 0 이 아닌 경우에는 I/O request가 발생하는 시간을 랜덤하게 생성
+            // interrupt 변수의 크기만큼 발생하는 시간을 랜덤하게 생성한 후 배열에 저장한다.
             Create_Random_IO(processes[i].interrupt_time, processes[i].interrupt, processes[i].cpu_burst_time);
         }
     }
@@ -356,7 +355,7 @@ process *Create_Random_Processes(int process_num) {
 }
 
 process *Create_Queue(int process_num) {
-    /* 프로세스를 저장하는 Array. process_num의 크기를 저장하는 Array 생성*/
+    /* 프로세스를 저장하는 Array. process_num의 크기만큼의 프로세스들을 저장하는 Array 생성*/
     process *q;
     // process_num 만큼 process structure array를 생성한다
     q = (process *) malloc((process_num + 1) * sizeof(process));
@@ -370,9 +369,7 @@ process *Create_Queue(int process_num) {
 }
 
 process PEEK_QUEUE(process *processes) {
-    /* process copied_process;
-      memcpy(&copied_process, &processes[0], sizeof(process));
-  */
+    /* QUEUE값의 맨 앞부분 반 */
     return processes[0];
 }
 
@@ -441,7 +438,7 @@ process context_switching(process *processes, process Running_State) {
 }
 
 process *Copy_Queue(process *processes, int process_num) {
-    int i, j;
+    int i, j; // i는 프로세스 배열 인덱스 접근, j는 I/O request 발생시간 접근
     process *copyprocess;
     copyprocess = Create_Queue(process_num);
     for (i = 0; i < process_num; i++) {
@@ -456,8 +453,7 @@ process *Copy_Queue(process *processes, int process_num) {
         copyprocess[i].io_burst_time = processes[i].io_burst_time;
         copyprocess[i].io_remaining_time = processes[i].io_remaining_time;
         copyprocess[i].aging = processes[i].aging;
-        if (copyprocess[i].interrupt != 0) { // 0 이 아닌 경우에는 I/O 가 발생하는 시간을 랜덤하게 생성
-            // I/O 의 interrupt 횟수만큼 배열을 생성한다.
+        if (copyprocess[i].interrupt != 0) {
             for (j = 0; j < copyprocess[i].interrupt; j++) {
                 // 인터럽트 시간복사
                 copyprocess[i].interrupt_time[j] = processes[i].interrupt_time[j];
@@ -605,7 +601,7 @@ void PRINT_RESULT(process *TERMINATED_QUEUE, int process_num, int algo) {
         average_CPU_burst_time += TERMINATED_QUEUE[i].cpu_burst_time;
         // Turn around time: CPU burst time + waiting time + interrupt(I/O interrupt는 1 단위시간으로 가 )
         ATT += (TERMINATED_QUEUE[i].waiting_time + TERMINATED_QUEUE[i].cpu_burst_time +
-                TERMINATED_QUEUE[i].io_burst_time);
+                TERMINATED_QUEUE[i].io_burst_time * TERMINATED_QUEUE[i].interrupt);
     }
     printf("\n");
     printf("______________________________________________________________________________________________________________\n");
@@ -672,7 +668,7 @@ void save_result(process *TERMINATED_QUEUE, int process_num, int algo) {
     result[algo].ATT = (float) result[algo].sum_turn_around_time / process_num;
 }
 
-void EVALUATION(int process_num) {
+void EVALUATION() {
     int i; // for loop 모듬 알고리즘 출력을 위해
     printf("______________________________________________________________________________________________________________\n");
     printf("                                           ** 모듬 알고리즘 수행한 결과 **                                           \n");
@@ -862,7 +858,7 @@ void SORT_BY_PRIORITY(process *processes, int process_num) {
     }
 }
 
-// I/O operation가 일어났는가
+// I/O request가 일어나는 시점인지 확인하는 함수
 int Is_IO_time(int execution_time, int interrupt, int *interrupt_time) {
     int flag = 0; // 1이면 I.O가 발생한 것이고 0 이면 I/O가 발생하지 않은 것이다.
     int i; // for loop
@@ -879,21 +875,20 @@ int Is_IO_time(int execution_time, int interrupt, int *interrupt_time) {
 
 int get_queue_length(process *READY_QUEUE) {
     int i;
-    // process의 PID가 0인곳에 넣기 위해서.
     for (i = 0; READY_QUEUE[i].PID != 0; i++);
 
     return i;
 }
 
 void FCFS(process *processes, int process_num) {
-    int j, l; // j: for loop에서 사용,
+    int j, l; // j: ready queue(waiting time) for loop, l: waiting queue(io remaining) for loop
 
-    TIME_PAST = 0;
-    CONTEXT_SWITCH = 0;
+    TIME_PAST = 0; // 현재 simulation 시작시간
+    CONTEXT_SWITCH = 0; // context switch 발생 횟수 카운
 
 
     // 인자로 들어온 processes의 값들은 바꾸지 않고 사용하기 위해 복사를 해서 사용.
-    process *FCFS_processes = Copy_Queue(processes, process_num); // 큐 복사(deep)
+    process *FCFS_processes = Copy_Queue(processes, process_num); // 큐 복사
 
     process *READY_QUEUE = Create_Queue(process_num); // Ready queue. 모두 0으로 초기화
     process *WAITING_QUEUE = Create_Queue(process_num); // waiting queue (I/O 할 때). 모두 0.
@@ -939,12 +934,12 @@ void FCFS(process *processes, int process_num) {
             INSERT_QUEUE(TERMINATED_QUEUE, Running_state);
             // 프로세스가 끝났으므로 초기화 시킨다
             Running_state = Initialization_Running_state();
-            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) { // 코드가 다름
+            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
                 Running_state = context_switching(READY_QUEUE, Running_state);
 
             }
         }
-        // I/O interrupt가 발생하는 경우.
+        // I/O request가 발생하는 경우.
         if (Running_state.interrupt >= 1 &&
             Is_IO_time(Running_state.execution_time, Running_state.interrupt, Running_state.interrupt_time)) {
             INSERT_QUEUE(WAITING_QUEUE, Running_state);
@@ -971,7 +966,7 @@ void FCFS(process *processes, int process_num) {
             READY_QUEUE[j].waiting_time++; // ready queue에 있는 프로세스들은 실행을 하지 않았으므로 waiting time++
         }
         for (l = 0; WAITING_QUEUE[l].PID != 0; l++) {
-            WAITING_QUEUE[l].io_remaining_time--;
+            WAITING_QUEUE[l].io_remaining_time--; // io device에서 1 단위시간 수행
         }
         TIME_PAST++; // 한번의 while문당 1 단위시간이 지나감
     }
@@ -991,12 +986,12 @@ void FCFS(process *processes, int process_num) {
 }
 
 void PSJF(process *processes, int process_num) {
-    int j, l;
-    int READY_QUEUE_LENGTH = 0;
+    int j, l; // j: ready queue(waiting time) for loop, l: waiting queue(io remaining) for loop
+    int READY_QUEUE_LENGTH = 0; // 짧은 시간을 순서로 정렬할때 사용하기 위해
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
     /* Queue 생성 */
-    process *PSJF_processes = Copy_Queue(processes, process_num); // 큐 복사(deep)
+    process *PSJF_processes = Copy_Queue(processes, process_num); // 큐 복사
     process *READY_QUEUE = Create_Queue(process_num); // Ready queue. 모두 0으로 초기화
     process *WAITING_QUEUE = Create_Queue(process_num); // waiting queue (I/O 할 때). 모두 0.
     process *TERMINATED_QUEUE = Create_Queue(process_num); // 종료된 queue. 모두 0으로 초기화.
@@ -1011,7 +1006,9 @@ void PSJF(process *processes, int process_num) {
                 // 만약 프로세스의 도착시간이 현재시간과 다르면 레디큐에 넣지 않음
                 break;
             } else {
+                //프로세스의 도착시간이 현재 시간과 같으므로 ready queue에 삽입
                 INSERT_QUEUE(READY_QUEUE, PEEK_QUEUE(PSJF_processes));
+                // ready queue로 삽입했으므로 프로세스는 삭제해준다
                 DELETE_QUEUE(PSJF_processes);
             }
         }
@@ -1031,7 +1028,7 @@ void PSJF(process *processes, int process_num) {
 
 
         }
-        // Preemptive shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
+        // shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
         READY_QUEUE_LENGTH = get_queue_length(READY_QUEUE);
         SORT_BY_REMAINING_TIME(READY_QUEUE, READY_QUEUE_LENGTH);
         // I/O Request가 발생하는 경우.
@@ -1044,15 +1041,15 @@ void PSJF(process *processes, int process_num) {
             }
         }
 
-        // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우 혹은 비어있는 경
+        // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우 혹은 비어있는 경우
         if (Running_state.remaining_time <= 0) {
             //남은 시간이 없으므로 수행이 끝났으니 Terminated queue로 삽입
             INSERT_QUEUE(TERMINATED_QUEUE, Running_state);
             // 프로세스가 끝났으므로 초기화 시킨다
             Running_state = Initialization_Running_state();
-            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) { // 코드가 다름
+            // 만약 ready queue에 프로세스가 있을 경우 CPU에 올린다.
+            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
                 Running_state = context_switching(READY_QUEUE, Running_state);
-
             }
         } else if (Running_state.remaining_time > PEEK_QUEUE(READY_QUEUE).remaining_time) {
             // 만약에 Running state의 남은시간보다 레디 큐에 있는 제일 작은 남은 시간이 더 작은 경우 switch
@@ -1100,12 +1097,12 @@ void PSJF(process *processes, int process_num) {
 }
 
 void NSJF(process *processes, int process_num) {
-    int j, l; //for loop
-    int READY_QUEUE_LENGTH = 0;
-    TIME_PAST = 0;
+    int j, l; // j: ready queue(waiting time) for loop, l: waiting queue(io remaining) for loop
+    int READY_QUEUE_LENGTH = 0; // 정렬할때 사용하기 위해서
+    TIME_PAST = 0; // CPU simulation 시작 시간
     CONTEXT_SWITCH = 0;
     /* Queue 생성 */
-    process *NSJF_processes = Copy_Queue(processes, process_num); // 큐 복사(deep)
+    process *NSJF_processes = Copy_Queue(processes, process_num); // 큐 복사
     process *READY_QUEUE = Create_Queue(process_num); // Ready queue. 모두 0으로 초기화
     process *WAITING_QUEUE = Create_Queue(process_num); // waiting queue (I/O 할 때). 모두 0.
     process *TERMINATED_QUEUE = Create_Queue(process_num); // 종료된 queue. 모두 0으로 초기화.
@@ -1141,7 +1138,7 @@ void NSJF(process *processes, int process_num) {
 
 
         }
-        // Preemptive shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
+        // shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
         READY_QUEUE_LENGTH = get_queue_length(READY_QUEUE);
         SORT_BY_REMAINING_TIME(READY_QUEUE, READY_QUEUE_LENGTH);
         // I/O Request가 발생하는 경우.
@@ -1161,7 +1158,7 @@ void NSJF(process *processes, int process_num) {
             INSERT_QUEUE(TERMINATED_QUEUE, Running_state);
             // 프로세스가 끝났으므로 초기화 시킨다
             Running_state = Initialization_Running_state();
-            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) { // 코드가 다름
+            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
                 Running_state = context_switching(READY_QUEUE, Running_state);
 
             }
@@ -1201,7 +1198,7 @@ void NSJF(process *processes, int process_num) {
 }
 
 void PPRI(process *processes, int process_num) {
-    int j, l; //for loop
+    int j, l; // j: ready queue(waiting time) for loop, l: waiting queue(io remaining) for loop
     int READY_QUEUE_LENGTH = 0;
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
@@ -1242,7 +1239,7 @@ void PPRI(process *processes, int process_num) {
 
 
         }
-        // Preemptive shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
+        // 우선순위로 정렬한다. 숫자가 클수록 우선순위가 높음.
         READY_QUEUE_LENGTH = get_queue_length(READY_QUEUE);
         SORT_BY_PRIORITY(READY_QUEUE, READY_QUEUE_LENGTH);
         // I/O Request가 발생하는 경우.
@@ -1267,7 +1264,7 @@ void PPRI(process *processes, int process_num) {
 
             }
         } else if (Running_state.priority < PEEK_QUEUE(READY_QUEUE).priority) {
-            // 만약에 Running state의 우선순위보다 레디 큐에 있는 제일 큰 우선순위가 더 큰 경우 switch
+            // preemptive: 만약에 Running state의 우선순위보다 레디 큐에 있는 제일 큰 우선순위가 더 큰 경우 switch
             Running_state = context_switching(READY_QUEUE, Running_state);
         }
 
@@ -1307,7 +1304,7 @@ void PPRI(process *processes, int process_num) {
 }
 
 void NPRI(process *processes, int process_num) {
-    int j, l; //for loop
+    int j, l;// j: ready queue(waiting time) for loop, l: waiting queue(io remaining) for loop
     int READY_QUEUE_LENGTH = 0;
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
@@ -1348,7 +1345,7 @@ void NPRI(process *processes, int process_num) {
 
 
         }
-        // Preemptive shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
+        // 우선순위로 정렬. 숫자가 클수록 우선순위가 높음
         READY_QUEUE_LENGTH = get_queue_length(READY_QUEUE);
         SORT_BY_PRIORITY(READY_QUEUE, READY_QUEUE_LENGTH);
         // I/O request가 발생하는 경우.
@@ -1362,13 +1359,13 @@ void NPRI(process *processes, int process_num) {
             }
         }
 
-        // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우 혹은 비어있는 경
+        // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우 혹은 비어있는 경우
         if (Running_state.remaining_time <= 0) {
             //남은 시간이 없으므로 수행이 끝났으니 Terminated queue로 삽입
             INSERT_QUEUE(TERMINATED_QUEUE, Running_state);
             // 프로세스가 끝났으므로 초기화 시킨다
             Running_state = Initialization_Running_state();
-            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) { // 코드가 다름
+            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
                 Running_state = context_switching(READY_QUEUE, Running_state);
 
             }
@@ -1408,13 +1405,13 @@ void NPRI(process *processes, int process_num) {
 }
 
 void RR(process *processes, int process_num) {
-    int j, l;
+    int j, l; // j: ready queue(waiting time) for loop, l: waiting queue(io remaining) for loop
     int time_quantum; // time quantum of RR
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
 
     /* Queue 생성 */
-    process *RR_processes = Copy_Queue(processes, process_num); // 큐 복사(deep)
+    process *RR_processes = Copy_Queue(processes, process_num); // 큐 복사
     process *READY_QUEUE = Create_Queue(process_num); // Ready queue. 모두 0으로 초기화
     process *WAITING_QUEUE = Create_Queue(process_num); // waiting queue (I/O 할 때). 모두 0.
     process *TERMINATED_QUEUE = Create_Queue(process_num); // 종료된 queue. 모두 0으로 초기화.
@@ -1457,13 +1454,13 @@ void RR(process *processes, int process_num) {
 
 
 
-        // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우 혹은 비어있는 경
+        // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우 혹은 비어있는 경우
         if (Running_state.remaining_time <= 0) {
             //남은 시간이 없으므로 수행이 끝났으니 Terminated queue로 삽입
             INSERT_QUEUE(TERMINATED_QUEUE, Running_state);
             // 프로세스가 끝났으므로 초기화 시킨다
             Running_state = Initialization_Running_state();
-            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) { // 코드가 다름
+            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
                 Running_state = context_switching(READY_QUEUE, Running_state);
 
             }
@@ -1514,12 +1511,12 @@ void RR(process *processes, int process_num) {
 }
 
 void AGPPRI(process *processes, int process_num) {
-    int j, l; //for loop
+    int j, l; // j: ready queue(waiting time) for loop, l: waiting queue(io remaining) for loop
     int READY_QUEUE_LENGTH = 0;
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
     /* Queue 생성 */
-    process *PPRI_processes = Copy_Queue(processes, process_num); // 큐 복사(deep)
+    process *PPRI_processes = Copy_Queue(processes, process_num); // 큐 복사
     process *READY_QUEUE = Create_Queue(process_num); // Ready queue. 모두 0으로 초기화
     process *WAITING_QUEUE = Create_Queue(process_num); // waiting queue (I/O 할 때). 모두 0.
     process *TERMINATED_QUEUE = Create_Queue(process_num); // 종료된 queue. 모두 0으로 초기화.
@@ -1569,7 +1566,7 @@ void AGPPRI(process *processes, int process_num) {
             }
         }
 
-        // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우 혹은 비어있는 경
+        // 수행하고 있는 프로세스가 CPU를 다 사용했을 경우 혹은 비어있는 경우
         if (Running_state.remaining_time <= 0) {
             //남은 시간이 없으므로 수행이 끝났으니 Terminated queue로 삽입
             INSERT_QUEUE(TERMINATED_QUEUE, Running_state);
@@ -1627,7 +1624,7 @@ void AGPPRI(process *processes, int process_num) {
 
 /* to prevent starvation in SJF */
 void HRRN(process *processes, int process_num) {
-    int j, l; //for loop
+    int j, l; // j: ready queue(waiting time) for loop, l: waiting queue(io remaining) for loop
     int READY_QUEUE_LENGTH = 0;
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
@@ -1668,7 +1665,7 @@ void HRRN(process *processes, int process_num) {
 
 
         }
-        // Preemptive shortest job first 이므로 남은 시간을 기준으로 정렬해야한다.
+        // (waiting_time + cpu_burst_time) / cpu_burst_time 가 큰 순서대로 정렬 (큰것이 앞)
         READY_QUEUE_LENGTH = get_queue_length(READY_QUEUE);
         SORT_BY_HRRN(READY_QUEUE, READY_QUEUE_LENGTH);
         print_process(READY_QUEUE, READY_QUEUE_LENGTH);
@@ -1689,7 +1686,7 @@ void HRRN(process *processes, int process_num) {
             INSERT_QUEUE(TERMINATED_QUEUE, Running_state);
             // 프로세스가 끝났으므로 초기화 시킨다
             Running_state = Initialization_Running_state();
-            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) { // 코드가 다름
+            if (PEEK_QUEUE(READY_QUEUE).PID != EMPTY) {
                 Running_state = context_switching(READY_QUEUE, Running_state);
 
             }
@@ -1730,11 +1727,11 @@ void HRRN(process *processes, int process_num) {
 }
 
 
-/* Multi level queue */
+/* Multi level Feedback queue */
 void MLQ(process *processes, int process_num) {
+    int j, l;// j: ready queue(waiting time) for loop, l: waiting queue(io remaining) for loop
     TIME_PAST = 0;
     CONTEXT_SWITCH = 0;
-    int j, l, len_sys = 0, len_int = 0, len_batch = 0;
     int time_quantum_sys = 3;
     int time_quantum_inter = 6;
     process *system_processes = Create_Queue(10);
@@ -1878,14 +1875,6 @@ void MLQ(process *processes, int process_num) {
         Running_state.remaining_time--; // 1단위시간만큼 CPU burst time에서 남은시간.
 
 
-
-
-
-
-
-        len_sys = get_queue_length(system_processes);
-        len_int = get_queue_length(interactive_processes);
-        len_batch = get_queue_length(batch_processes);
 
         for (l = 0; WAITING_QUEUE[l].PID != 0; l++) {
             WAITING_QUEUE[l].io_remaining_time--;
